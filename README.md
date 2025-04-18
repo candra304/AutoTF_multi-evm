@@ -5,9 +5,6 @@
 npm install
 ```
 ## file txt
-```
-
-```
 1
 ```
 nano addresspenerima.txt
