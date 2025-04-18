@@ -12,7 +12,8 @@ const tokenAddress = process.env.TOKEN_ADDRESS;
 // ABI ERC-20
 const erc20Abi = [
     "function balanceOf(address owner) view returns (uint256)",
-    "function transfer(address to, uint256 value) returns (bool)"
+    "function transfer(address to, uint256 value) returns (bool)",
+    "function decimals() view returns (uint8)"
 ];
 
 // Fungsi menampilkan banner
@@ -75,7 +76,7 @@ async function autoTransfer() {
     console.log(chalk.yellow(`\n🚀 Mode: ${mode === "1" ? "ETH" : "Token ERC-20"} | Jumlah: ${amountInput}\n`));
 
     for (let i = 0; i < privateKeys.length; i++) {
-        console.log(chalk.magentaBright(`\n🔄 Memproses akun ke-${i + 1}...`));
+        console.log(chalk.cyanBright(`\n🔄 Memproses akun ke-${i + 1}...`));
 
         const rawKey = privateKeys[i];
         let senderWallet;
@@ -90,55 +91,67 @@ async function autoTransfer() {
         console.log(chalk.blueBright(`💳 Akun: ${senderWallet.address} (Wallet ke-${i + 1}) sedang diproses...`));
 
         let balance;
-        try {
-            balance = await provider.getBalance(senderWallet.address);
-        } catch (err) {
-            console.log(chalk.red(`❌ Gagal ambil saldo: ${err.message}`));
-            continue;
-        }
-
-        if (mode === "1" && balance < amount) {
-            console.log(chalk.red(`⛔ Wallet tidak cukup saldo (${ethers.formatEther(balance)} ETH)`));
-            continue;
-        }
-
         const tokenContract = mode === "2" ? new ethers.Contract(tokenAddress, erc20Abi, senderWallet) : null;
 
         if (mode === "2") {
             try {
+                const decimals = await tokenContract.decimals();
+                const rawAmount = ethers.parseUnits(amountInput, decimals);
                 balance = await tokenContract.balanceOf(senderWallet.address);
+
+                console.log(chalk.greenBright(`💰 Saldo token di Wallet ke-${i + 1}: ${ethers.formatUnits(balance, decimals)} Token`));
+
+                if (balance < rawAmount) {
+                    console.log(chalk.red(`⛔ Wallet tidak cukup saldo token (${ethers.formatUnits(balance, decimals)} Token)`));
+                    continue;
+                }
+
+                for (let j = 0; j < recipients.length; j++) {
+                    const recipient = recipients[j];
+                    try {
+                        const tx = await tokenContract.transfer(recipient, rawAmount);
+                        console.log(chalk.green(`✅ TX dari wallet ke-${i + 1} ke penerima ${j + 1} | Hash: ${tx.hash}`));
+                        await tx.wait();
+                    } catch (err) {
+                        console.log(chalk.red(`❌ Gagal kirim token ke ${recipient}: ${err.message}`));
+                    }
+
+                    console.log(chalk.gray("⌛ Tunggu 3 detik sebelum lanjut...\n"));
+                    await new Promise(r => setTimeout(r, 3000));
+                }
             } catch (err) {
-                console.log(chalk.red(`❌ Gagal ambil saldo token: ${err.message}`));
+                console.log(chalk.red(`❌ Gagal mendapatkan desimal atau saldo token: ${err.message}`));
+                continue;
+            }
+        } else {
+            try {
+                balance = await provider.getBalance(senderWallet.address);
+            } catch (err) {
+                console.log(chalk.red(`❌ Gagal ambil saldo ETH: ${err.message}`));
                 continue;
             }
 
             if (balance < amount) {
-                console.log(chalk.red(`⛔ Wallet tidak cukup saldo token (${ethers.formatEther(balance)} Token)`));
+                console.log(chalk.red(`⛔ Wallet tidak cukup saldo (${ethers.formatEther(balance)} ETH)`));
                 continue;
             }
-        }
 
-        for (let j = 0; j < recipients.length; j++) {
-            const recipient = recipients[j];
-            try {
-                let tx;
-                if (mode === "1") {
-                    tx = await senderWallet.sendTransaction({
+            for (let j = 0; j < recipients.length; j++) {
+                const recipient = recipients[j];
+                try {
+                    const tx = await senderWallet.sendTransaction({
                         to: recipient,
                         value: amount
                     });
-                } else {
-                    tx = await tokenContract.transfer(recipient, amount);
+                    console.log(chalk.green(`✅ TX dari wallet ke-${i + 1} ke penerima ${j + 1} | Hash: ${tx.hash}`));
+                    await tx.wait();
+                } catch (err) {
+                    console.log(chalk.red(`❌ Gagal kirim ETH ke ${recipient}: ${err.message}`));
                 }
 
-                console.log(chalk.green(`✅ TX dari wallet ke-${i + 1} ke penerima ${j + 1} | Hash: ${tx.hash}`));
-                await tx.wait();
-            } catch (err) {
-                console.log(chalk.red(`❌ Gagal kirim ke ${recipient}: ${err.message}`));
+                console.log(chalk.gray("⌛ Tunggu 3 detik sebelum lanjut...\n"));
+                await new Promise(r => setTimeout(r, 3000));
             }
-
-            console.log(chalk.gray("⌛ Tunggu 3 detik sebelum lanjut...\n"));
-            await new Promise(r => setTimeout(r, 3000));
         }
     }
 
