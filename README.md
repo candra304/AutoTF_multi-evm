@@ -14,10 +14,19 @@ nano addresspenerima.txt
 nano walletpengirim.txt
 
 ```
-## file .env
+## file .env ( tinggal tambah aja sesuai kebutuhan)
 ```
-RPC_URL=https://mainnet_or_tesnet
-TOKEN_ADDRESS=0x.token_address
+RPC_1_NAME=STT
+RPC_1_URL=https://dream-rpc.somnia.network
+RPC_1_TOKEN=
+
+RPC_2_NAME=MEGA
+RPC_2_URL=https://carrot.megaeth.com/rpc
+RPC_2_TOKEN=
+
+RPC_3_NAME=ETHRISE
+RPC_3_URL=https://testnet.riselabs.xyz/
+RPC_3_TOKEN=
 
 ```
 ## eksekusi 
