@@ -2,6 +2,7 @@
 # clone
 ```
 git clone https://github.com/candra304/AutoTF_multi-evm.git
+AutoTF_multi-evm
 
 ```
 # requirement 
