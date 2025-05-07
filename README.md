@@ -1,6 +1,8 @@
 ## fitur bisa multi evm 
+# clone
+```
+git clone https://github.com/candra304/AutoTF_multi-evm.git
 
-## instalasi
 ```
 npm install
 ```
