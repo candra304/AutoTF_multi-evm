@@ -83,7 +83,7 @@ async function autoTransfer(selectedRpc) {
     const tokenAddress = selectedRpc.token;
 
     const mode = await askQuestion(
-        "Pilih mode transfer (1 untuk native coin, 2 untuk Token ERC-20): "
+        "\nPilih mode transfer:\n  1. Native Coin\n  2. Token ERC-20\n=> Pilih (1/2): "
     );
 
     if (!["1", "2"].includes(mode)) {
@@ -91,10 +91,18 @@ async function autoTransfer(selectedRpc) {
         exit(1);
     }
 
-    const amountInput = await askQuestion("Masukkan jumlah yang akan dikirim (contoh: 0.005): ");
-    const amount = ethers.parseEther(amountInput);
+    console.log(chalk.cyan("\nPilih jumlah yang akan dikirim:"));
+    console.log("  1. Masukkan jumlah manual");
+    console.log("  2. Kirim 99% dari saldo");
+    console.log("  3. Kirim random antara 0.01% - 0.1% dari saldo");
+    const amountMode = await askQuestion("=> Pilih (1/2/3): ");
 
-    console.log(chalk.yellow(`\n🚀 Chain: ${selectedRpc.name} | Mode: ${mode === "1" ? "Native Coin" : "Token ERC-20"} | Jumlah: ${amountInput}\n`));
+    let manualAmountInput;
+    if (amountMode === "1") {
+        manualAmountInput = await askQuestion("Masukkan jumlah yang akan dikirim (contoh: 0.005): ");
+    }
+
+    console.log(chalk.yellow(`\n🚀 Chain: ${selectedRpc.name} | Mode: ${mode === "1" ? "Native Coin" : "Token ERC-20"}\n`));
 
     let tokenInfo;
     if (mode === "2") {
@@ -119,33 +127,41 @@ async function autoTransfer(selectedRpc) {
         if (mode === "2") {
             const tokenContract = new ethers.Contract(tokenAddress, erc20Abi, senderWallet);
             try {
-                const rawAmount = ethers.parseUnits(amountInput, tokenInfo.decimals);
                 const balance = await tokenContract.balanceOf(senderWallet.address);
+                const decimals = tokenInfo.decimals;
+                const symbol = tokenInfo.symbol;
 
-                console.log(chalk.greenBright(`✅   Saldo token: ${ethers.formatUnits(balance, tokenInfo.decimals)} ${tokenInfo.symbol}`));
+                console.log(chalk.greenBright(`✅   Saldo token: ${ethers.formatUnits(balance, decimals)} ${symbol}`));
+
+                let rawAmount;
+                if (amountMode === "1") {
+                    rawAmount = ethers.parseUnits(manualAmountInput, decimals);
+                } else if (amountMode === "2") {
+                    rawAmount = balance * 99n / 100n;
+                } else if (amountMode === "3") {
+                    const randomPercentInt = BigInt(Math.floor(Math.random() * (10 - 1 + 1) + 1)); // 1-10
+                    rawAmount = balance * randomPercentInt / 10000n;
+                }
 
                 if (balance < rawAmount) {
-                    console.log(chalk.red(`❌   Wallet tidak cukup saldo token (${ethers.formatUnits(balance, tokenInfo.decimals)} ${tokenInfo.symbol})`));
+                    console.log(chalk.red(`❌   Wallet tidak cukup saldo token`));
                     continue;
                 }
 
                 for (let j = 0; j < recipients.length; j++) {
                     const recipient = recipients[j];
-                    console.log(chalk.blueBright(`👩‍💻   [${i + 1}.${j + 1}] Kirim ke penerima ke-${j + 1}: ${recipient}`));
+                    console.log(chalk.blueBright(`👩‍💻   [${i + 1}.${j + 1}] Kirim ke: ${recipient}`));
 
                     try {
                         const tx = await tokenContract.transfer(recipient, rawAmount);
-                        console.log(chalk.green(`✅   Mengirim ${amountInput} ${tokenInfo.symbol} ke ${recipient}`));
+                        console.log(chalk.green(`✅   Mengirim ${ethers.formatUnits(rawAmount, decimals)} ${symbol} ke ${recipient}`));
                         console.log(chalk.green(`✅   TX Hash: ${tx.hash}`));
                         await tx.wait();
-
-                        const recipientBalance = await tokenContract.balanceOf(recipient);
-                        console.log(chalk.green(`✅   Saldo penerima (${recipient}): ${ethers.formatUnits(recipientBalance, tokenInfo.decimals)} ${tokenInfo.symbol}`));
                     } catch (err) {
-                        console.log(chalk.red(`❌   Gagal kirim token ke ${recipient}: ${err.message}`));
+                        console.log(chalk.red(`❌   Gagal kirim token: ${err.message}`));
                     }
 
-                    console.log(chalk.gray(`⏳   Tunggu 3 detik sebelum lanjut...\n`));
+                    console.log(chalk.gray(`⏳   Tunggu 3 detik...\n`));
                     await new Promise(r => setTimeout(r, 3000));
                 }
             } catch (err) {
@@ -156,31 +172,38 @@ async function autoTransfer(selectedRpc) {
                 const balance = await provider.getBalance(senderWallet.address);
                 console.log(chalk.greenBright(`✅   Saldo native: ${ethers.formatEther(balance)} ${selectedRpc.name}`));
 
-                if (balance < amount) {
-                    console.log(chalk.red(`❌   Wallet tidak cukup saldo native (${ethers.formatEther(balance)})`));
+                let sendAmount;
+                if (amountMode === "1") {
+                    sendAmount = ethers.parseEther(manualAmountInput);
+                } else if (amountMode === "2") {
+                    sendAmount = balance * 99n / 100n;
+                } else if (amountMode === "3") {
+                    const randomPercentInt = BigInt(Math.floor(Math.random() * (10 - 1 + 1) + 1)); // 1-10
+                    sendAmount = balance * randomPercentInt / 10000n;
+                }
+
+                if (balance < sendAmount) {
+                    console.log(chalk.red(`❌   Wallet tidak cukup saldo native`));
                     continue;
                 }
 
                 for (let j = 0; j < recipients.length; j++) {
                     const recipient = recipients[j];
-                    console.log(chalk.blueBright(`👩‍💻   [${i + 1}.${j + 1}] Kirim ke penerima ke-${j + 1}: ${recipient}`));
+                    console.log(chalk.blueBright(`👩‍💻   [${i + 1}.${j + 1}] Kirim ke: ${recipient}`));
 
                     try {
                         const tx = await senderWallet.sendTransaction({
                             to: recipient,
-                            value: amount
+                            value: sendAmount
                         });
-                        console.log(chalk.green(`✅   Mengirim ${amountInput} native coin ke ${recipient}`));
+                        console.log(chalk.green(`✅   Mengirim ${ethers.formatEther(sendAmount)} native coin ke ${recipient}`));
                         console.log(chalk.green(`✅   TX Hash: ${tx.hash}`));
                         await tx.wait();
-
-                        const recipientBalance = await provider.getBalance(recipient);
-                        console.log(chalk.green(`✅   Saldo penerima (${recipient}): ${ethers.formatEther(recipientBalance)} ${selectedRpc.name}`));
                     } catch (err) {
-                        console.log(chalk.red(`❌   Gagal kirim native coin ke ${recipient}: ${err.message}`));
+                        console.log(chalk.red(`❌   Gagal kirim native coin: ${err.message}`));
                     }
 
-                    console.log(chalk.gray(`⏳   Tunggu 3 detik sebelum lanjut...\n`));
+                    console.log(chalk.gray(`⏳   Tunggu 3 detik...\n`));
                     await new Promise(r => setTimeout(r, 3000));
                 }
             } catch (err) {
@@ -202,12 +225,12 @@ async function start() {
         exit(1);
     }
 
-    console.log("Daftar Coin:");
+    console.log("Daftar Chain:");
     rpcList.forEach((rpc, index) => {
         console.log(`${index + 1}. ${rpc.name}`);
     });
 
-    const selectedIndex = await askQuestion("Pilih coin yang akan diproses (masukkan nomor): ");
+    const selectedIndex = await askQuestion("Pilih chain (masukkan nomor): ");
     const selectedRpc = rpcList[Number(selectedIndex) - 1];
 
     if (!selectedRpc) {
